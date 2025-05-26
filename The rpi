@@ -1,0 +1,93 @@
+import serial #these are the libraries that we have used in project
+import threading
+import tkinter as tk
+from datetime import datetime
+import time
+
+SERIAL_PORT = '/dev/ttyACM0'  #This is the serial port my device detects
+BAUD_RATE = 9600
+
+class TrafficGUI:
+    def __init__(self, root):
+        self.root = root
+        root.title("Traffic Light System")
+
+        self.system_state_label = tk.Label(root, text="System State: Unknown", font=("Arial", 16))
+        self.system_state_label.pack(pady=5)
+
+        self.emergency_label = tk.Label(root, text="", font=("Arial", 20), fg="red")
+        self.emergency_label.pack(pady=5)
+
+        self.sound_label = tk.Label(root, text="Sound Level: N/A", font=("Arial", 14))
+        self.sound_label.pack(pady=5)
+
+        self.distance_label = tk.Label(root, text="Distance: N/A", font=("Arial", 14))
+        self.distance_label.pack(pady=5)
+
+        self.traffic_status_label = tk.Label(root, text="Traffic Status: Waiting for data...", font=("Arial", 14))
+        self.traffic_status_label.pack(pady=10)
+
+        
+        self.emergency_active = False
+        self.emergency_start_time = None
+        self.emergency_duration = 6   
+        self.post_emergency_wait = 5  
+
+        
+        self.lock = threading.Lock()
+
+       
+        self.serial_thread = threading.Thread(target=self.read_serial, daemon=True)
+        self.serial_thread.start()
+
+        
+        self.root.after(500, self.periodic_check)
+
+    def read_serial(self):
+        try:
+            with serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1) as ser:
+                time.sleep(2)  # Arduino reset delay
+                while True:
+                    line = ser.readline().decode('utf-8').strip()
+                    if line:
+                        self.process_serial_line(line)
+        except serial.SerialException as e:
+            self.system_state_label.config(text=f"Serial Error: {e}")
+
+    def process_serial_line(self, line):
+        
+        with self.lock:
+            # System activated
+            if line == "SYSTEM ACTIVATED":
+                self.system_state_label.config(text="System State: ON")
+                self.emergency_label.config(text="")
+   
+                    if sound_val > 25 and 0 < dist_val < 20:
+                        self.traffic_status_label.config(text="Traffic Status: Potential emergency detected")
+                    else:
+                        if not self.emergency_active:
+                            self.traffic_status_label.config(text="Traffic Status: Normal operation")
+                except Exception as e:
+                    print(f"Error parsing line: {line} -> {e}")
+
+    def periodic_check(self):
+        with self.lock:
+            if self.emergency_active:
+                elapsed = time.time() - self.emergency_start_time
+                if elapsed >= self.emergency_duration + self.post_emergency_wait:
+                   
+                    self.emergency_active = False
+                    self.emergency_start_time = None
+                    self.emergency_label.config(text="")
+                    self.traffic_status_label.config(text="Traffic Status: Normal operation")
+           
+        self.root.after(500, self.periodic_check)
+
+
+def main():
+    root = tk.Tk()
+    app = TrafficGUI(root)
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
